@@ -1,25 +1,33 @@
 #include "NRFLite.h"
 
-#define debug(input)   { if (_serial) _serial->print(input);   }
-#define debugln(input) { if (_serial) _serial->println(input); }
+#define debug(input)               \
+    {                              \
+        if (_serial)               \
+            _serial->print(input); \
+    }
+#define debugln(input)               \
+    {                                \
+        if (_serial)                 \
+            _serial->println(input); \
+    }
 
 #if defined(__AVR_ATtiny44__) || defined(__AVR_ATtiny84__)
-    const static uint8_t USI_DI  = 6; // PA6
-    const static uint8_t USI_DO  = 5; // PA5
-    const static uint8_t USI_SCK = 4; // PA4
+const static uint8_t USI_DI = 6;  // PA6
+const static uint8_t USI_DO = 5;  // PA5
+const static uint8_t USI_SCK = 4; // PA4
 #elif defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__)
-    const static uint8_t USI_DI  = 0; // PB0
-    const static uint8_t USI_DO  = 1; // PB1
-    const static uint8_t USI_SCK = 2; // PB2
+const static uint8_t USI_DI = 0;  // PB0
+const static uint8_t USI_DO = 1;  // PB1
+const static uint8_t USI_SCK = 2; // PB2
 #else
-    #include "SPI.h" // Use the normal Arduino hardware SPI library.
+#include "SPI.h" // Use the normal Arduino hardware SPI library.
 #endif
 
 ////////////////////
 // Public methods //
 ////////////////////
 
-uint8_t NRFLite::init(uint8_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates bitrate, uint8_t channel, uint8_t callSpiBegin)
+uint8_t NRFLite::init(uint16_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates bitrate, uint8_t channel, uint8_t callSpiBegin)
 {
     _cePin = cePin;
     _csnPin = csnPin;
@@ -30,22 +38,26 @@ uint8_t NRFLite::init(uint8_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates b
     pinMode(_cePin, OUTPUT);
     pinMode(_csnPin, OUTPUT);
     digitalWrite(_csnPin, HIGH);
-    
-    // Setup the microcontroller for SPI communication with the radio.
-    #if defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny44__) || defined(__AVR_ATtiny84__)
-        pinMode(USI_DI, INPUT ); digitalWrite(USI_DI, HIGH);
-        pinMode(USI_DO, OUTPUT); digitalWrite(USI_DO, LOW);
-        pinMode(USI_SCK, OUTPUT); digitalWrite(USI_SCK, LOW);
-    #else
-        if (callSpiBegin)
-        {
-            // Arduino SPI makes SS (D10 on ATmega328) an output and sets it HIGH.  It must remain an output
-            // for Master SPI operation, but in case it started as LOW, we'll set it back.
-            uint8_t savedSS = digitalRead(SS);
-            SPI.begin();
-            if (_csnPin != SS) digitalWrite(SS, savedSS);
-        }
-    #endif
+
+// Setup the microcontroller for SPI communication with the radio.
+#if defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny44__) || defined(__AVR_ATtiny84__)
+    pinMode(USI_DI, INPUT);
+    digitalWrite(USI_DI, HIGH);
+    pinMode(USI_DO, OUTPUT);
+    digitalWrite(USI_DO, LOW);
+    pinMode(USI_SCK, OUTPUT);
+    digitalWrite(USI_SCK, LOW);
+#else
+    if (callSpiBegin)
+    {
+        // Arduino SPI makes SS (D10 on ATmega328) an output and sets it HIGH.  It must remain an output
+        // for Master SPI operation, but in case it started as LOW, we'll set it back.
+        uint8_t savedSS = digitalRead(SS);
+        SPI.begin();
+        if (_csnPin != SS)
+            digitalWrite(SS, savedSS);
+    }
+#endif
 
     // With the microcontroller's pins setup, we can now initialize the radio.
     uint8_t success = initRadio(radioId, bitrate, channel);
@@ -54,7 +66,7 @@ uint8_t NRFLite::init(uint8_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates b
 
 #if defined(__AVR__)
 
-uint8_t NRFLite::initTwoPin(uint8_t radioId, uint8_t momiPin, uint8_t sckPin, Bitrates bitrate, uint8_t channel)
+uint8_t NRFLite::initTwoPin(uint16_t radioId, uint8_t momiPin, uint8_t sckPin, Bitrates bitrate, uint8_t channel)
 {
     _cePin = sckPin;
     _csnPin = sckPin;
@@ -62,7 +74,8 @@ uint8_t NRFLite::initTwoPin(uint8_t radioId, uint8_t momiPin, uint8_t sckPin, Bi
 
     // Default states for the 2 multiplexed pins.
     pinMode(momiPin, INPUT);
-    pinMode(sckPin, OUTPUT); digitalWrite(sckPin, HIGH);
+    pinMode(sckPin, OUTPUT);
+    digitalWrite(sckPin, HIGH);
 
     // These port and mask functions are in Arduino.h, e.g. arduino-1.8.1\hardware\arduino\avr\cores\arduino\Arduino.h
     // Direct port manipulation is used since timing is critical for the multiplexed SPI bit-banging.
@@ -85,7 +98,7 @@ void NRFLite::addAckData(void *data, uint8_t length, uint8_t removeExistingAcks)
     {
         spiTransfer(WRITE_OPERATION, FLUSH_TX, NULL, 0); // Clear the TX buffer.
     }
-    
+
     // Add the packet to the TX buffer for pipe 1, the pipe used to receive packets from radios that
     // send us data.  When we receive the next transmission from a radio, we'll provide this ACK data in the
     // auto-acknowledgment packet that goes back.
@@ -144,7 +157,7 @@ uint8_t NRFLite::hasData(uint8_t usingInterrupts)
             }
         }
     }
-    
+
     uint8_t notInRxMode = readRegister(CONFIG) != CONFIG_REG_SETTINGS_FOR_RX_MODE;
     if (notInRxMode)
     {
@@ -176,7 +189,7 @@ void NRFLite::readData(void *data)
     uint8_t dataLength;
     spiTransfer(READ_OPERATION, R_RX_PL_WID, &dataLength, 1);
     spiTransfer(READ_OPERATION, R_RX_PAYLOAD, data, dataLength);
-    
+
     // Clear data received flag.
     uint8_t statusReg = readRegister(STATUS_NRF);
     if (statusReg & _BV(RX_DR))
@@ -205,29 +218,41 @@ uint8_t NRFLite::startRx()
     return inRxMode;
 }
 
-uint8_t NRFLite::send(uint8_t toRadioId, void *data, uint8_t length, SendType sendType)
+uint8_t NRFLite::send(uint16_t toRadioId, void *data, uint8_t length, SendType sendType)
 {
     prepForTx(toRadioId, sendType);
 
     // Clear any previously asserted TX success or max retries flags.
     writeRegister(STATUS_NRF, _BV(TX_DS) | _BV(MAX_RT));
-    
+
     // Add data to the TX buffer, with or without an ACK request.
-    if (sendType == NO_ACK) { spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD_NO_ACK, data, length); }
-    else                    { spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD       , data, length); }
+    if (sendType == NO_ACK)
+    {
+        spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD_NO_ACK, data, length);
+    }
+    else
+    {
+        spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD, data, length);
+    }
 
     uint8_t result = waitForTxToComplete();
     return result;
 }
 
-void NRFLite::startSend(uint8_t toRadioId, void *data, uint8_t length, SendType sendType)
+void NRFLite::startSend(uint16_t toRadioId, void *data, uint8_t length, SendType sendType)
 {
     prepForTx(toRadioId, sendType);
-    
+
     // Add data to the TX buffer, with or without an ACK request.
-    if (sendType == NO_ACK) { spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD_NO_ACK, data, length); }
-    else                    { spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD       , data, length); }
-    
+    if (sendType == NO_ACK)
+    {
+        spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD_NO_ACK, data, length);
+    }
+    else
+    {
+        spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD, data, length);
+    }
+
     // Start transmission.
     // If we have separate pins for CE and CSN, CE will be LOW and we must pulse it to send the packet.
     if (_usingSeparateCeAndCsnPins)
@@ -241,11 +266,11 @@ void NRFLite::startSend(uint8_t toRadioId, void *data, uint8_t length, SendType 
 void NRFLite::whatHappened(uint8_t &txOk, uint8_t &txFail, uint8_t &rxReady)
 {
     uint8_t statusReg = readRegister(STATUS_NRF);
-    
+
     txOk = statusReg & _BV(TX_DS);
     txFail = statusReg & _BV(MAX_RT);
     rxReady = statusReg & _BV(RX_DR);
-    
+
     // When we need to see interrupt flags, we disable the logic here which clears them.
     // Programs that have an interrupt handler for the radio's IRQ pin will use 'whatHappened'
     // and if we don't disable this logic, it's not possible for us to check these flags.
@@ -262,7 +287,7 @@ void NRFLite::powerDown()
     {
         digitalWrite(_cePin, LOW);
     }
-    
+
     // Turn off the radio.
     writeRegister(CONFIG, readRegister(CONFIG) & ~_BV(PWR_UP));
 }
@@ -283,22 +308,34 @@ void NRFLite::printDetails()
     printRegister("FIFO_STATUS", readRegister(FIFO_STATUS));
     printRegister("DYNPD", readRegister(DYNPD));
     printRegister("FEATURE", readRegister(FEATURE));
-    
+
     uint8_t data[5];
-    
+
     String msg = "TX_ADDR ";
     readRegister(TX_ADDR, &data, 5);
-    for (uint8_t i = 0; i < 4; i++) { msg += data[i]; msg += ','; }
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        msg += data[i];
+        msg += ',';
+    }
     msg += data[4];
-    
+
     msg += "\nRX_ADDR_P0 ";
     readRegister(RX_ADDR_P0, &data, 5);
-    for (uint8_t i = 0; i < 4; i++) { msg += data[i]; msg += ','; }
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        msg += data[i];
+        msg += ',';
+    }
     msg += data[4];
 
     msg += "\nRX_ADDR_P1 ";
     readRegister(RX_ADDR_P1, &data, 5);
-    for (uint8_t i = 0; i < 4; i++) { msg += data[i]; msg += ','; }
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        msg += data[i];
+        msg += ',';
+    }
     msg += data[4];
 
     debugln(msg);
@@ -328,7 +365,7 @@ uint8_t NRFLite::scanChannel(uint8_t channel, uint8_t measurementCount)
             strength++;
         }
     } while (measurementCount--);
-    
+
     return strength;
 }
 
@@ -353,7 +390,7 @@ uint8_t NRFLite::getRxPacketLength()
 
     // Verify the data length is valid. This private method is only called if getPipeOfFirstRxPacket indicates a packet exists,
     // so the datalength should never be 0. Likewise the datalength should never be > 32 since that's the largest possible packet the radio supports.
-    if (dataLength == 0 || dataLength > 32)
+    if (dataLength > 32 || !dataLength)
     {
         spiTransfer(WRITE_OPERATION, FLUSH_RX, NULL, 0); // Clear invalid data in the RX buffer.
         writeRegister(STATUS_NRF, readRegister(STATUS_NRF) | _BV(TX_DS) | _BV(MAX_RT) | _BV(RX_DR));
@@ -365,7 +402,7 @@ uint8_t NRFLite::getRxPacketLength()
     }
 }
 
-uint8_t NRFLite::initRadio(uint8_t radioId, Bitrates bitrate, uint8_t channel)
+uint8_t NRFLite::initRadio(uint16_t radioId, Bitrates bitrate, uint8_t channel)
 {
     _lastToRadioId = -1;
     _resetInterruptFlags = 1;
@@ -374,7 +411,10 @@ uint8_t NRFLite::initRadio(uint8_t radioId, Bitrates bitrate, uint8_t channel)
     delay(OFF_TO_POWERDOWN_MILLIS);
 
     // Valid channel range is 2400 - 2525 MHz, in 1 MHz increments.
-    if (channel > MAX_NRF_CHANNEL) { channel = MAX_NRF_CHANNEL; }
+    if (channel > MAX_NRF_CHANNEL)
+    {
+        channel = MAX_NRF_CHANNEL;
+    }
     writeRegister(RF_CH, channel);
 
     // Transmission speed, retry times, and output power setup.
@@ -384,28 +424,28 @@ uint8_t NRFLite::initRadio(uint8_t radioId, Bitrates bitrate, uint8_t channel)
     {
         writeRegister(RF_SETUP, 0b00001110);   // 2 Mbps, 0 dBm output power
         writeRegister(SETUP_RETR, 0b00011111); // 0001 =  500 uS between retries, 1111 = 15 retries
-        _transmissionRetryWaitMicros = 600;   // 100 more than the retry delay
+        _transmissionRetryWaitMicros = 600;    // 100 more than the retry delay
         _maxHasDataIntervalMicros = 1200;
     }
     else if (bitrate == BITRATE1MBPS)
     {
         writeRegister(RF_SETUP, 0b00000110);   // 1 Mbps, 0 dBm output power
         writeRegister(SETUP_RETR, 0b00011111); // 0001 =  500 uS between retries, 1111 = 15 retries
-        _transmissionRetryWaitMicros = 600;   // 100 more than the retry delay
+        _transmissionRetryWaitMicros = 600;    // 100 more than the retry delay
         _maxHasDataIntervalMicros = 1700;
     }
     else
     {
         writeRegister(RF_SETUP, 0b00100110);   // 250 Kbps, 0 dBm output power
         writeRegister(SETUP_RETR, 0b01011111); // 0101 = 1500 uS between retries, 1111 = 15 retries
-        _transmissionRetryWaitMicros = 1600;  // 100 more than the retry delay
+        _transmissionRetryWaitMicros = 1600;   // 100 more than the retry delay
         _maxHasDataIntervalMicros = 5000;
     }
 
     // Assign this radio's address to RX pipe 1.  When another radio sends us data, this is the address
     // it will use.  We use RX pipe 1 to store our address since the address in RX pipe 0 is reserved
     // for use with auto-acknowledgment packets.
-    uint8_t address[5] = { ADDRESS_PREFIX[0], ADDRESS_PREFIX[1], ADDRESS_PREFIX[2], ADDRESS_PREFIX[3], radioId };
+    uint8_t address[5] = {ADDRESS_PREFIX[0], ADDRESS_PREFIX[1], ADDRESS_PREFIX[2], (uint8_t)(radioId >> 8), (uint8_t)radioId};
     writeRegister(RX_ADDR_P1, &address, 5);
 
     // Enable dynamically sized packets on the 2 RX pipes we use, 0 and 1.
@@ -427,7 +467,7 @@ uint8_t NRFLite::initRadio(uint8_t radioId, Bitrates bitrate, uint8_t channel)
     return success;
 }
 
-void NRFLite::prepForTx(uint8_t toRadioId, SendType sendType)
+void NRFLite::prepForTx(uint16_t toRadioId, SendType sendType)
 {
     if (_lastToRadioId != toRadioId)
     {
@@ -435,7 +475,7 @@ void NRFLite::prepForTx(uint8_t toRadioId, SendType sendType)
 
         // TX pipe address sets the destination radio for the data.
         // RX pipe 0 is special and needs the same address in order to receive ACK packets from the destination radio.
-        uint8_t address[5] = { ADDRESS_PREFIX[0], ADDRESS_PREFIX[1], ADDRESS_PREFIX[2], ADDRESS_PREFIX[3], toRadioId };
+        uint8_t address[5] = {ADDRESS_PREFIX[0], ADDRESS_PREFIX[1], ADDRESS_PREFIX[2], (uint8_t)(toRadioId >> 8), (uint8_t)toRadioId};
         writeRegister(TX_ADDR, &address, 5);
         writeRegister(RX_ADDR_P0, &address, 5);
     }
@@ -460,7 +500,7 @@ void NRFLite::prepForTx(uint8_t toRadioId, SendType sendType)
     {
         spiTransfer(WRITE_OPERATION, FLUSH_RX, NULL, 0);
     }
-    
+
     // If TX buffer is full, wait for all queued packets to be sent.
     uint8_t txBufferIsFull = fifoReg & _BV(FIFO_FULL);
     if (txBufferIsFull)
@@ -503,14 +543,14 @@ uint8_t NRFLite::waitForTxToComplete()
         }
 
         delayMicroseconds(_transmissionRetryWaitMicros);
-        
+
         statusReg = readRegister(STATUS_NRF);
         packetWasSent = statusReg & _BV(TX_DS);
         packetCouldNotBeSent = statusReg & _BV(MAX_RT);
 
         if (packetWasSent)
         {
-            writeRegister(STATUS_NRF, _BV(TX_DS));   // Clear TX success flag.
+            writeRegister(STATUS_NRF, _BV(TX_DS)); // Clear TX success flag.
         }
         else if (packetCouldNotBeSent)
         {
@@ -549,45 +589,57 @@ void NRFLite::writeRegister(uint8_t regName, void *data, uint8_t length)
 
 void NRFLite::spiTransfer(SpiTransferType transferType, uint8_t regName, void *data, uint8_t length)
 {
-    uint8_t* intData = reinterpret_cast<uint8_t*>(data);
+    uint8_t *intData = reinterpret_cast<uint8_t *>(data);
 
     noInterrupts(); // Prevent an interrupt from interferring with the communication.
 
     if (_useTwoPinSpiTransfer)
     {
-        #if defined(__AVR__)
-            digitalWrite(_csnPin, LOW);              // Signal radio to listen to the SPI bus.
-            delayMicroseconds(CSN_DISCHARGE_MICROS); // Allow capacitor on CSN pin to discharge.
-            twoPinTransfer(regName);
-            for (uint8_t i = 0; i < length; ++i) {
-                uint8_t newData = twoPinTransfer(intData[i]);
-                if (transferType == READ_OPERATION) { intData[i] = newData; }
+#if defined(__AVR__)
+        digitalWrite(_csnPin, LOW);              // Signal radio to listen to the SPI bus.
+        delayMicroseconds(CSN_DISCHARGE_MICROS); // Allow capacitor on CSN pin to discharge.
+        twoPinTransfer(regName);
+        for (uint8_t i = 0; i < length; ++i)
+        {
+            uint8_t newData = twoPinTransfer(intData[i]);
+            if (transferType == READ_OPERATION)
+            {
+                intData[i] = newData;
             }
-            digitalWrite(_csnPin, HIGH);             // Stop radio from listening to the SPI bus.
-            delayMicroseconds(CSN_DISCHARGE_MICROS); // Allow capacitor on CSN pin to recharge.
-	    #endif
+        }
+        digitalWrite(_csnPin, HIGH);             // Stop radio from listening to the SPI bus.
+        delayMicroseconds(CSN_DISCHARGE_MICROS); // Allow capacitor on CSN pin to recharge.
+#endif
     }
     else
     {
         digitalWrite(_csnPin, LOW); // Signal radio to listen to the SPI bus.
 
-        #if defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny44__) || defined(__AVR_ATtiny84__)
-            // ATtiny transfer with USI.
-            usiTransfer(regName);
-            for (uint8_t i = 0; i < length; ++i) {
-                uint8_t newData = usiTransfer(intData[i]);
-                if (transferType == READ_OPERATION) { intData[i] = newData; }
+#if defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny44__) || defined(__AVR_ATtiny84__)
+                                    // ATtiny transfer with USI.
+        usiTransfer(regName);
+        for (uint8_t i = 0; i < length; ++i)
+        {
+            uint8_t newData = usiTransfer(intData[i]);
+            if (transferType == READ_OPERATION)
+            {
+                intData[i] = newData;
             }
-        #else
-            // Transfer with the Arduino SPI library.
-            SPI.beginTransaction(SPISettings(NRF_SPICLOCK, MSBFIRST, SPI_MODE0));
-            SPI.transfer(regName);
-            for (uint8_t i = 0; i < length; ++i) {
-                uint8_t newData = SPI.transfer(intData[i]);
-                if (transferType == READ_OPERATION) { intData[i] = newData; }
+        }
+#else
+                                    // Transfer with the Arduino SPI library.
+        SPI.beginTransaction(SPISettings(NRF_SPICLOCK, MSBFIRST, SPI_MODE0));
+        SPI.transfer(regName);
+        for (uint8_t i = 0; i < length; ++i)
+        {
+            uint8_t newData = SPI.transfer(intData[i]);
+            if (transferType == READ_OPERATION)
+            {
+                intData[i] = newData;
             }
-            SPI.endTransaction();
-        #endif
+        }
+        SPI.endTransaction();
+#endif
 
         digitalWrite(_csnPin, HIGH); // Stop radio from listening to the SPI bus.
     }
@@ -618,27 +670,32 @@ uint8_t NRFLite::twoPinTransfer(uint8_t data)
 {
     uint8_t byteFromRadio = 0;
     uint8_t currentBitIndex = 8;
-    
+
     do
     {
         byteFromRadio <<= 1; // Shift the byte we are building to the left.
-        
-        if (*_momi_PIN & _momi_MASK) { byteFromRadio++; } // Read bit from radio on MOMI pin.  If HIGH, set bit position 0 of our byte to 1.
-        *_momi_DDR |= _momi_MASK;                         // Change MOMI to be an OUTPUT pin.
-        
-        if (data & 0x80) { *_momi_PORT |=  _momi_MASK; }  // Set MOMI HIGH if bit position 7 of the byte we are sending is 1.
+
+        if (*_momi_PIN & _momi_MASK)
+        {
+            byteFromRadio++;
+        }                         // Read bit from radio on MOMI pin.  If HIGH, set bit position 0 of our byte to 1.
+        *_momi_DDR |= _momi_MASK; // Change MOMI to be an OUTPUT pin.
+
+        if (data & 0x80)
+        {
+            *_momi_PORT |= _momi_MASK;
+        } // Set MOMI HIGH if bit position 7 of the byte we are sending is 1.
 
         *_sck_PORT |= _sck_MASK;  // Set SCK HIGH to transfer the bit to the radio.  CSN will remain LOW while the capacitor begins charging.
         *_sck_PORT &= ~_sck_MASK; // Set SCK LOW.  CSN will have remained LOW due to the capacitor.
-        
+
         *_momi_PORT &= ~_momi_MASK; // Set MOMI LOW.
-        *_momi_DDR &= ~_momi_MASK;  // Change MOMI back to an INPUT.  Since we previously ensured it was LOW, its PULLUP resistor will never 
+        *_momi_DDR &= ~_momi_MASK;  // Change MOMI back to an INPUT.  Since we previously ensured it was LOW, its PULLUP resistor will never
                                     // be enabled which would prevent MOMI from fully reaching a LOW state.
 
         data <<= 1; // Shift the byte we are sending to the left.
-    }
-    while (--currentBitIndex);
-    
+    } while (--currentBitIndex);
+
     return byteFromRadio;
 }
 
@@ -653,8 +710,7 @@ void NRFLite::printRegister(const char name[], uint8_t reg)
     do
     {
         msg += bitRead(reg, --i);
-    }
-    while (i);
+    } while (i);
 
     debugln(msg);
 }
