@@ -37,7 +37,11 @@ uint8_t NRFLite::init(uint16_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates 
     // so we operate most of the time with CSN HIGH.
     pinMode(_cePin, OUTPUT);
     pinMode(_csnPin, OUTPUT);
+#ifdef NRF_LITE_CSN_HIGH
+    NRF_LITE_CSN_HIGH;
+#else
     digitalWrite(_csnPin, HIGH);
+#endif
 
 // Setup the microcontroller for SPI communication with the radio.
 #if defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny44__) || defined(__AVR_ATtiny84__)
@@ -47,7 +51,7 @@ uint8_t NRFLite::init(uint16_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates 
     digitalWrite(USI_DO, LOW);
     pinMode(USI_SCK, OUTPUT);
     digitalWrite(USI_SCK, LOW);
-#else
+#elif defined(__AVR_ATmega328P__)
     if (callSpiBegin)
     {
         // Arduino SPI makes SS (D10 on ATmega328) an output and sets it HIGH.  It must remain an output
@@ -56,6 +60,11 @@ uint8_t NRFLite::init(uint16_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates 
         SPI.begin();
         if (_csnPin != SS)
             digitalWrite(SS, savedSS);
+    }
+#else
+    if (callSpiBegin)
+    {
+        SPI.begin();
     }
 #endif
 
@@ -203,13 +212,21 @@ uint8_t NRFLite::startRx()
     waitForTxToComplete();
 
     // Put radio into Standby-I mode in order to transition into RX mode.
+#ifdef NRF_LITE_CE_LOW
+    NRF_LITE_CE_LOW;
+#else
     digitalWrite(_cePin, LOW);
+#endif
 
     // Configure the radio for receiving.
     writeRegister(CONFIG, CONFIG_REG_SETTINGS_FOR_RX_MODE);
 
     // Put radio into RX mode.
+#ifdef NRF_LITE_CE_HIGH
+    NRF_LITE_CE_HIGH;
+#else
     digitalWrite(_cePin, HIGH);
+#endif
 
     // Wait for the transition into RX mode.
     delay(POWERDOWN_TO_RXTX_MODE_MILLIS);
@@ -257,9 +274,17 @@ void NRFLite::startSend(uint16_t toRadioId, void *data, uint8_t length, SendType
     // If we have separate pins for CE and CSN, CE will be LOW and we must pulse it to send the packet.
     if (_usingSeparateCeAndCsnPins)
     {
+#ifdef NRF_LITE_CE_HIGH
+        NRF_LITE_CE_HIGH;
+#else
         digitalWrite(_cePin, HIGH);
+#endif
         delayMicroseconds(CE_TRANSMISSION_MICROS);
+#ifdef NRF_LITE_CE_LOW
+        NRF_LITE_CE_LOW;
+#else
         digitalWrite(_cePin, LOW);
+#endif
     }
 }
 
@@ -285,7 +310,11 @@ void NRFLite::powerDown()
     // If we have separate CE and CSN pins, we can gracefully transition into Power Down mode by first entering Standby-I mode.
     if (_usingSeparateCeAndCsnPins)
     {
+#ifdef NRF_LITE_CE_LOW
+    NRF_LITE_CE_LOW;
+#else
         digitalWrite(_cePin, LOW);
+#endif
     }
 
     // Turn off the radio.
@@ -346,7 +375,11 @@ uint8_t NRFLite::scanChannel(uint8_t channel, uint8_t measurementCount)
     uint8_t strength = 0;
 
     // Put radio into Standby-I mode.
+#ifdef NRF_LITE_CE_LOW
+    NRF_LITE_CE_LOW;
+#else
     digitalWrite(_cePin, LOW);
+#endif
 
     // Set the channel.
     writeRegister(RF_CH, channel);
@@ -355,9 +388,17 @@ uint8_t NRFLite::scanChannel(uint8_t channel, uint8_t measurementCount)
     do
     {
         // Put the radio into RX mode and wait a little time for a signal to be received.
+#ifdef NRF_LITE_CE_HIGH
+        NRF_LITE_CE_HIGH;
+#else
         digitalWrite(_cePin, HIGH);
+#endif
         delayMicroseconds(400);
+#ifdef NRF_LITE_CE_LOW
+        NRF_LITE_CE_LOW;
+#else
         digitalWrite(_cePin, LOW);
+#endif
 
         uint8_t signalWasReceived = readRegister(CD);
         if (signalWasReceived)
@@ -486,7 +527,11 @@ void NRFLite::prepForTx(uint16_t toRadioId, SendType sendType)
     if (!readyForTx)
     {
         // Put radio into Standby-I mode in order to transition into TX mode.
+#ifdef NRF_LITE_CE_LOW
+        NRF_LITE_CE_LOW;
+#else
         digitalWrite(_cePin, LOW);
+#endif
         configReg = CONFIG_REG_SETTINGS_FOR_RX_MODE & ~_BV(PRIM_RX);
         writeRegister(CONFIG, configReg);
         delay(POWERDOWN_TO_RXTX_MODE_MILLIS);
@@ -537,9 +582,17 @@ uint8_t NRFLite::waitForTxToComplete()
         // If we have separate pins for CE and CSN, CE will be LOW so we must toggle it to send a packet.
         if (_usingSeparateCeAndCsnPins)
         {
+#ifdef NRF_LITE_CE_HIGH
+            NRF_LITE_CE_HIGH;
+#else
             digitalWrite(_cePin, HIGH);
+#endif
             delayMicroseconds(CE_TRANSMISSION_MICROS);
+#ifdef NRF_LITE_CE_LOW
+            NRF_LITE_CE_LOW;
+#else
             digitalWrite(_cePin, LOW);
+#endif
         }
 
         delayMicroseconds(_transmissionRetryWaitMicros);
@@ -596,7 +649,11 @@ void NRFLite::spiTransfer(SpiTransferType transferType, uint8_t regName, void *d
     if (_useTwoPinSpiTransfer)
     {
 #if defined(__AVR__)
+#ifdef NRF_LITE_CSN_LOW
+        NRF_LITE_CSN_LOW;
+#else
         digitalWrite(_csnPin, LOW);              // Signal radio to listen to the SPI bus.
+#endif
         delayMicroseconds(CSN_DISCHARGE_MICROS); // Allow capacitor on CSN pin to discharge.
         twoPinTransfer(regName);
         for (uint8_t i = 0; i < length; ++i)
@@ -607,13 +664,21 @@ void NRFLite::spiTransfer(SpiTransferType transferType, uint8_t regName, void *d
                 intData[i] = newData;
             }
         }
+#ifdef NRF_LITE_CSN_HIGH
+        NRF_LITE_CSN_HIGH;
+#else
         digitalWrite(_csnPin, HIGH);             // Stop radio from listening to the SPI bus.
+#endif
         delayMicroseconds(CSN_DISCHARGE_MICROS); // Allow capacitor on CSN pin to recharge.
 #endif
     }
     else
     {
+#ifdef NRF_LITE_CSN_LOW
+        NRF_LITE_CSN_LOW;
+#else
         digitalWrite(_csnPin, LOW); // Signal radio to listen to the SPI bus.
+#endif
 
 #if defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny44__) || defined(__AVR_ATtiny84__)
                                     // ATtiny transfer with USI.
@@ -640,8 +705,11 @@ void NRFLite::spiTransfer(SpiTransferType transferType, uint8_t regName, void *d
         }
         SPI.endTransaction();
 #endif
-
+#ifdef NRF_LITE_CSN_HIGH
+        NRF_LITE_CSN_HIGH;
+#else
         digitalWrite(_csnPin, HIGH); // Stop radio from listening to the SPI bus.
+#endif
     }
 
     interrupts();
